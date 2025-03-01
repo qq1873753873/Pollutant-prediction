@@ -7,6 +7,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error, r2_score
 from keras.models import Sequential
 from keras.layers import Conv1D, MaxPooling1D, LSTM, Dense, Dropout, Flatten,Reshape
+from keras.layers import Input, Dense, Dropout, LayerNormalization, MultiHeadAttention, Add
 import matplotlib.pyplot as plt
 from datetime import datetime
 import seaborn as sns
@@ -15,9 +16,18 @@ import tensorflow as tf
 from keras.models import Model
 tf.compat.v1.disable_eager_execution()
 
+FLAG=3 #1 for CNN_LSTM, 2 for LSTM, 3 for Transformer
+
+if FLAG==1:
+    model_name="CNN_LSTM"
+elif FLAG==2:
+    model_name="LSTM"
+elif FLAG==3:
+    model_name="Transformer"
+
 # 获取当前时间
 current_time = datetime.now().strftime("%y%m%d%H%M%S")
-path=f'.\\outputs\\CNN_LSTM\\{current_time}\\'
+path=f'.\\outputs\\{model_name}\\{current_time}\\'
 os.makedirs(path,exist_ok=True)
 res=""
 
@@ -133,6 +143,72 @@ all_true = []
 all_true.append(data[target].iloc[0, :].values)
 all_preds.append(data[target].iloc[0, :].values)
 
+def create_transformer_model(input_shape):
+    inputs = Input(shape=input_shape)
+    
+    # Multi-Head Attention
+    attention_output = MultiHeadAttention(num_heads=4, key_dim=2)(inputs, inputs)
+    attention_output = Add()([inputs, attention_output])  # 残差连接
+    attention_output = LayerNormalization(epsilon=1e-6)(attention_output)
+    
+    # Feed Forward
+    ffn = Dense(64, activation='relu')(attention_output)
+    ffn = Dense(input_shape[-1])(ffn)  # 输出维度与输入一致
+    ffn_output = Add()([attention_output, ffn])  # 残差连接
+    ffn_output = LayerNormalization(epsilon=1e-6)(ffn_output)
+
+    # 输出层
+    outputs = Dense(9)(ffn_output[:, -1, :])  # 只取最后一个时间步的输出
+    model = Model(inputs, outputs)
+    return model
+
+def build_cnn_lstm_model(input_shape):
+    """
+    构建 1DCNN + LSTM 模型
+    :param input_shape: 输入数据的形状 (time_steps, n_features)
+    :return: 构建好的模型
+    """
+    model = Sequential()
+    
+    # CNN 部分
+    model.add(Conv1D(filters=32, kernel_size=1, activation='relu', input_shape=input_shape))
+    model.add(Conv1D(filters=30, kernel_size=1, activation='relu'))
+    
+    # 将输出展开为一维向量，以便输入 LSTM
+    model.add(Reshape((input_shape[0], -1)))  # 重塑为 (time_steps, features)
+    
+    # LSTM 部分
+    model.add(LSTM(32, return_sequences=True))
+    model.add(Dropout(0.2))  # 添加 Dropout 防止过拟合
+    model.add(LSTM(32, return_sequences=False))
+    model.add(Dropout(0.2))  # 添加 Dropout 防止过拟合
+    
+    # 全连接层
+    model.add(Dense(25, activation='relu'))
+    model.add(Dense(9))  # 输出 9 个值，对应预测的目标属性
+    
+    return model
+
+def build_lstm_model(input_shape):
+    """
+    构建 LSTM 模型
+    :param input_shape: 输入数据的形状 (time_steps, n_features)
+    :return: 构建好的模型
+    """
+    model = Sequential()
+    
+    # LSTM 部分
+    model.add(LSTM(32, return_sequences=True, input_shape=input_shape))
+    model.add(Dropout(0.2))  # 添加 Dropout 防止过拟合
+    model.add(LSTM(32, return_sequences=False))
+    model.add(Dropout(0.2))  # 添加 Dropout 防止过拟合
+    
+    # 全连接层
+    model.add(Dense(25, activation='relu'))
+    model.add(Dense(9))  # 输出 11 个值，对应预测的目标属性
+    
+    return model
+
 for train_index, test_index in kf.split(X):
     # 划分训练集和测试集
     X_train, X_test = X[train_index], X[test_index]
@@ -141,19 +217,12 @@ for train_index, test_index in kf.split(X):
     # 获取输入形状 (time_step, 特征数)
     input_shape = (X_train.shape[1], X_train.shape[2])#2,13
     
-    # 构建1DCNN+LSTM模型
-    model = Sequential()
-    # CNN
-    model.add(Conv1D(filters=32, kernel_size=1, activation='relu', input_shape=input_shape))
-    model.add(Conv1D(filters=30, kernel_size=1, activation='relu'))#这里cnn滤波器数量应为X_train.shape[1]的倍数，也就是3的倍数，可以是60
-    # 将输出展开为一维向量，以便输入 LSTM
-    model.add(Reshape((X_train.shape[1], -1)))  # 重塑为 (time_steps, features)
-    model.add(LSTM(32, return_sequences=True, input_shape=input_shape))
-    model.add(Dropout(0.2))  # 添加Dropout防止过拟合
-    model.add(LSTM(32, return_sequences=False))
-    model.add(Dropout(0.2))  # 添加Dropout防止过拟合
-    model.add(Dense(25, activation='relu'))
-    model.add(Dense(9))  # 输出11-2个值，对应预测的目标属性
+    if FLAG==1:
+        model=build_cnn_lstm_model(input_shape)
+    elif FLAG==2:
+        model=build_lstm_model(input_shape)
+    elif FLAG==3:
+        model=create_transformer_model(input_shape)
 
     # 编译模型
     model.compile(optimizer='adam', loss='mean_squared_error')

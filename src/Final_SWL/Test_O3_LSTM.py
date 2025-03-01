@@ -9,6 +9,21 @@ from keras.layers import LSTM, Dense, Dropout
 import matplotlib.pyplot as plt
 from datetime import datetime
 import seaborn as sns
+import tensorflow as tf
+
+# 检查GPU是否可用
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+
+# 设置TensorFlow使用GPU
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        # 设置只使用第一个GPU
+        tf.config.set_visible_devices(gpus[0], 'GPU')
+        logical_gpus = tf.config.list_logical_devices('GPU')
+        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU")
+    except RuntimeError as e:
+        print(e)
 
 # 获取当前时间
 current_time = datetime.now().strftime("%y%m%d%H%M%S")
