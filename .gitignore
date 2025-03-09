@@ -7,3 +7,4 @@
 */.mypy_cache/*
 /lightning_logs/*
 /wandb/*
+/outputs_GAC/*
