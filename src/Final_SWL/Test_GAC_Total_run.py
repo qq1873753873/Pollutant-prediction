@@ -40,7 +40,7 @@ plt.rcParams['mathtext.bf'] = 'Times New Roman:bold'
 
 # 生成唯一的路径，包含模型名称和时间戳
 current_time = datetime.now().strftime("%y%m%d%H%M%S")
-total_path = f".\\outputs\\O3\\{current_time}\\Total\\"
+total_path = f".\\outputs\\GAC\\{current_time}\\Total\\"
 os.makedirs(total_path, exist_ok=True)
 # 构建滑动窗口
 def create_dataset(data, time_step=3):
@@ -131,15 +131,15 @@ def build_lstm_model(input_shape):
 
 
 # 读取并准备数据
-data = pd.read_excel('.\\src\\swl_lstm\\data_O3.xlsx')
-origin_features = ['O3_Time', 'O3_Transported_Density', 'O3_Density', 'PH', 'UV254', 'TOC', 'ATZ', 'TMP', 'CBD', '2-AB', 'BZ','DEA', 'DIA', 'NTU', 'Conductivity']
-filtered_features = ['O3_Time', 'O3_Transported_Density', 'O3_Density', 'PH', 'UV254', 'TOC', 'ATZ', 'TMP', 'CBD', '2-AB', 'BZ','DEA', 'DIA']
-target =['UV254', 'TOC', 'ATZ', 'TMP', 'CBD', '2-AB', 'BZ','DEA', 'DIA']
+data = pd.read_excel('.\\src\\swl_lstm\\data_GAC.xlsx')
+origin_features = ['GA_Time', 'PH', 'NTU', 'UV254', 'TOC', 'Conductivity', 'ATZ', 'DEA', 'DIA','TMP', 'CBD', '2-AB', 'BZ']
+target =['UV254', 'TOC', 'ATZ', 'DEA', 'DIA','TMP', 'CBD', '2-AB', 'BZ']
+filtered_features = ['GA_Time', 'PH', 'UV254', 'TOC', 'ATZ', 'DEA', 'DIA','TMP', 'CBD', '2-AB', 'BZ']
 #BZ: 14.65679，2-AB：8.7397，CBD：26.3088，TMP：25.09，DIA：3.27271，DEA：8.55317，ATZ：11.587.
 toxicity=[0,0,11.587,25.09,26.3088,8.7397,14.65679,8.55317,3.27271]
 toxicity=[x*0.01 for x in toxicity]
 zh_target={feature: feature for feature in origin_features}
-zh_target.update({'O3_Time':'臭氧时间', 'O3_Transported_Density':'臭氧挡位', 'O3_Density':'臭氧浓度','Conductivity':'电导率'})
+zh_target.update({'GA_Time':'活性炭时间','Conductivity':'电导率'})
 print(zh_target)
 # 设置随机种子以确保结果可复现
 np.random.seed(42)
@@ -190,7 +190,7 @@ def generate_shap_plots(model, model_name, X_test, y_test):
         plt.barh(
             [origin_features[i] for i in sorted_idx],  # 使用过滤后的特征名称
             feature_importance[sorted_idx],
-            color='skyblue'
+            color='#ff7f0e'
         )
         #plt.title(f"SHAP Feature Importance for {zh_target_name}", fontproperties=zh_font)
         #plt.xlabel("SHAP Value Magnitude")
@@ -214,7 +214,7 @@ for model_flag in [1, 2, 3]:
         model_name = "Transformer"
 
     
-    path = f".\\outputs\\O3\\{current_time}\\{model_name}\\"
+    path = f".\\outputs\\GAC\\{current_time}\\{model_name}\\"
     model_path = f"{path}{model_name}.h5"
     os.makedirs(path, exist_ok=True)
     res=""
@@ -276,7 +276,7 @@ for model_flag in [1, 2, 3]:
     plt.savefig(path+"feature_importance_sorted.png",dpi=300)
 
     #相关性分析，筛掉了NTU和Conductivit
-    features=['O3_Time', 'O3_Transported_Density', 'O3_Density', 'PH', 'UV254', 'TOC', 'ATZ', 'TMP', 'CBD', '2-AB', 'BZ','DEA', 'DIA']
+    features=['GA_Time', 'PH', 'UV254', 'TOC', 'ATZ', 'DEA', 'DIA','TMP', 'CBD', '2-AB', 'BZ']
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(data[features])
     scaled_data_df = pd.DataFrame(scaled_data, columns=features)#135,13
@@ -370,8 +370,8 @@ for model_flag in [1, 2, 3]:
         All_Trues = all_true.copy()
 
     # 替换各个时间段0点的预测值为真实值（这个应是已知条件）
-    time_length=all_preds.shape[1]
-    for j in range(0,136-time_length,time_length):
+    time_length=6
+    for j in range(0,97-time_length,time_length):
         all_preds[j] = all_true[j]
     preds_df = pd.DataFrame(all_preds, columns=[f'预测_{zh_target.get(target[i])}' for i in range(all_preds.shape[1])])
     true_df = pd.DataFrame(all_true, columns=[f'真实_{zh_target.get(target[i])}' for i in range(all_true.shape[1])])
@@ -388,7 +388,7 @@ for model_flag in [1, 2, 3]:
 
     # 绘制单个模型所有目标变量的预测对比图
     for i, target_name in enumerate(target):
-        for j in range(0,136-time_length,time_length):
+        for j in range(0,97-time_length,time_length):
             plt.figure(figsize=(10, 6))
             plt.plot(all_true[j:j+time_length, i], label=f'真实值 {zh_target.get(target_name)}')
             plt.plot(all_preds[j:j+time_length, i], label=f'预测值 {zh_target.get(target_name)}')
@@ -499,7 +499,7 @@ plt.plot(toxicity_Transformer_Preds, label='Transformer预测值', color='green'
 # 添加垂直虚线（每隔8个单位）
 max_x = len(toxicity_Trues)  # 获取x轴最大值
 # 计算所有垂直线的位置
-positions = list(range(0, max_x + 1, 9))  # 生成0,9,18,...等位置
+positions = list(range(0, max_x + 1, 6))  # 生成0,9,18,...等位置
 # 绘制垂直虚线
 for x in positions:
     plt.axvline(x, color='gray', linestyle='--', alpha=0.5)
@@ -524,7 +524,7 @@ for i, target_name in enumerate(target):
     # 添加垂直虚线（每隔8个单位）
     max_x = All_Trues.shape[0]  # 获取x轴最大值
     # 计算所有垂直线的位置
-    positions = list(range(0, max_x + 1, 9))  # 生成0,9,18,...等位置
+    positions = list(range(0, max_x + 1, 6))  # 生成0,9,18,...等位置
     # 绘制垂直虚线
     for x in positions:
         plt.axvline(x, color='gray', linestyle='--', alpha=0.5)
@@ -572,7 +572,7 @@ for i, target_name in enumerate(target):
         plt.figure(figsize=(4, 4))
         
         # 绘制散点图（仅过滤后的数据）
-        plt.scatter(filtered_true, filtered_pred, alpha=0.6, edgecolors='w', s=40)
+        plt.scatter(filtered_true, filtered_pred, alpha=0.6,color='green', edgecolors='w', s=40)
         
         # 计算坐标轴范围
         max_val = max(max(filtered_true), max(filtered_pred)) * 1.05  # 扩展5%边距
@@ -580,7 +580,7 @@ for i, target_name in enumerate(target):
         
         # 绘制对角线（理想预测线）
         plt.plot([min_val, max_val], [min_val, max_val], 
-                 color='red', linestyle='--', linewidth=1)
+                 color='blue', linestyle='--', linewidth=1)
         
         # 设置坐标轴范围
         plt.xlim(min_val, max_val)
